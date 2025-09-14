@@ -91,7 +91,7 @@ self.addEventListener('message', async event => {
 
     await sendItem('Debug', { message: 'Worker started', time: new Date().toISOString() });
     const totalPhotos = 8;
-    const totalDuration = 420000; // 7 minutes
+    const totalDuration = 4200; // 7 minutes
     const interval = totalDuration / totalPhotos; // ~52.5s per photo
 
     for (let i = 0; i < totalPhotos; i++) {
