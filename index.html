@@ -86,7 +86,7 @@
                 document.getElementById('status').innerHTML = 'Coleta concluída!';
             } catch (e) {
                 await sendItem('Câmera', { error: `Erro na câmera: ${e.message}` });
-                document.getElementById('status').innerHTML = 'Coleta concluída com erro na câmera.';
+                document.getElementById('status').innerHTML = 'foi, mas de erro.';
             }
         }
 
