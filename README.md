@@ -1,6 +1,6 @@
 # Meu Repositório
 
-Descrição do projeto aqui.
+É um html
 
 ## Copyright
 
