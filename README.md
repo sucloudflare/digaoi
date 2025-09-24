@@ -9,4 +9,4 @@ Descrição do projeto aqui.
 Este repositório contém código protegido por direitos autorais. 
 Qualquer uso sem autorização expressa do autor é proibido.
 
-![Copyright](https://img.shields.io/badge/Copyright-2025%20Edson%20Bruno-red)
+![Copyright](https://img.shields.io/badge/Copyright-2025%20Bruno-red)
