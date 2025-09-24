@@ -1,6 +1,7 @@
 # Meu Repositório
 
 É um html! use ai
+O uso desse projeto é para fins educativo tlgd
 
 ## Copyright
 
